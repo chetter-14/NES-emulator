@@ -1,0 +1,3 @@
+C:/Computer_Engineering/NES-emulator/build/CMakeFiles/ALL_BUILD.dir
+C:/Computer_Engineering/NES-emulator/build/CMakeFiles/ZERO_CHECK.dir
+C:/Computer_Engineering/NES-emulator/build/src/CMakeFiles/NES-emulator.dir
