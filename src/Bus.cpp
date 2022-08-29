@@ -4,6 +4,8 @@ Bus::Bus()
 {
 	// Clear RAM content
 	for (auto& i : ram) i = 0x00;
+
+	cpu.connectBus(this);
 }
 
 Bus::~Bus()
