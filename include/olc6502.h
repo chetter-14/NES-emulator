@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <string>
+#include <vector>
 
 class Bus;
 
@@ -76,4 +78,14 @@ private:
 
 	uint8_t getFlag(FLAGS6502 f);
 	void setFlag(FLAGS6502 f, bool v);
+
+	struct INSTRUCTION
+	{
+		std::string name;
+		uint8_t(olc6502::* operate)(void) = nullptr;
+		uint8_t(olc6502::* addrmode)(void) = nullptr;
+		uint8_t cycles = 0;
+	};
+
+	std::vector<INSTRUCTION> lookup;
 };
