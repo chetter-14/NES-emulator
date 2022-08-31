@@ -67,7 +67,7 @@ public:
 	uint16_t addr_abs = 0x0000;	// to store address (for different addressing modes)
 	uint16_t addr_rel = 0x00;	// for jump instructions (relative address)
 	uint8_t	 opcode = 0x00;
-	uint8_t  cycles = 0x00;
+	uint8_t  cycles = 0;
 
 private:
 	Bus* bus = nullptr;
