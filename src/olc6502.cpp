@@ -40,10 +40,26 @@ void olc6502::write(uint16_t a, uint8_t d)
 	bus->write(a, d);
 }
 
+uint8_t olc6502::getFlag(FLAGS6502 f)
+{
+	return (status & f) > 0 ? 1 : 0;
+}
+
 void olc6502::clock()
 {
 	if (cycles == 0)
 	{
+		opcode = read(pc);
+		pc++;
 
+		cycles = lookup[opcode].cycles;
+
+		uint8_t additional_cycle1 = (this->*lookup[opcode].addrmode)();	// call the function of addressing mode
+		uint8_t additional_cycle2 = (this->*lookup[opcode].operate)();	// call the function to perform an operation
+
+		cycles += (additional_cycle1 & additional_cycle2);			// why & operand ? 
 	}
+
+	cycles--;
 }
+
