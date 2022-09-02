@@ -45,6 +45,14 @@ uint8_t olc6502::getFlag(FLAGS6502 f)
 	return (status & f) > 0 ? 1 : 0;
 }
 
+void olc6502::setFlag(FLAGS6502 f, bool v)
+{
+	if (v)
+		status |= f;
+	else
+		status &= ~f;
+}
+
 void olc6502::clock()
 {
 	if (cycles == 0)
@@ -63,3 +71,102 @@ void olc6502::clock()
 	cycles--;
 }
 
+uint8_t olc6502::IMP()
+{
+	fetched = a;
+	return 0;
+}
+
+uint8_t olc6502::IMM()
+{
+	addr_abs = pc++;
+	return 0;
+}
+
+uint8_t olc6502::ZP0()
+{
+	addr_abs = read(pc);
+	pc++;
+	addr_abs &= 0x00FF;
+	return 0;
+}
+
+uint8_t olc6502::ZPX()
+{
+	addr_abs = (read(pc) + x);
+	pc++;
+	addr_abs &= 0x00FF;
+	return 0;
+}
+
+uint8_t olc6502::ZPY()
+{
+	addr_abs = (read(pc) + y);
+	pc++;
+	addr_abs &= 0x00FF;
+	return 0;
+}
+
+uint8_t olc6502::ABS()
+{
+	uint16_t lo = read(pc);
+	pc++;
+	uint16_t hi = read(pc);
+	pc++;
+
+	addr_abs = (hi << 8) | lo;
+	return 0;
+}
+
+uint8_t olc6502::ABX()
+{
+	uint16_t lo = read(pc);
+	pc++;
+	uint16_t hi = read(pc);
+	pc++;
+
+	addr_abs = (hi << 8) | lo;
+	addr_abs += x;
+
+	if ((addr_abs & 0xFF00) != (hi << 8))	// if addr_abs now on the next page
+		return 1;							// we may need an additional clock cycle
+	else
+		return 0;
+}
+
+uint8_t olc6502::ABY()
+{
+	uint16_t lo = read(pc);
+	pc++;
+	uint16_t hi = read(pc);
+	pc++;
+
+	addr_abs = (hi << 8) | lo;
+	addr_abs += y;
+
+	if ((addr_abs & 0xFF00) != (hi << 8))
+		return 1;
+	else
+		return 0;
+}
+
+uint8_t olc6502::IND()
+{
+	uint16_t ptr_lo = read(pc);
+	pc++;
+	uint16_t ptr_hi = read(pc);
+	pc++;
+
+	uint16_t ptr = (ptr_hi << 8) | ptr_lo;
+
+	if (ptr_lo == 0x00FF)	// simulate the hardware bug with pages
+	{
+		addr_abs = ( (uint16_t)read(ptr & 0xFF00) << 8) | read(ptr);
+	}
+	else					// execute normally
+	{
+		addr_abs = ( (uint16_t)read(ptr + 1) << 8) | read(ptr);
+	}
+
+	return 0;
+}
