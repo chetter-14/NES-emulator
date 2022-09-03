@@ -45,6 +45,7 @@ uint8_t olc6502::getFlag(FLAGS6502 f)
 	return (status & f) > 0 ? 1 : 0;
 }
 
+// bool parameter indicates whether to set (true) or unset (false) the bit (flag)
 void olc6502::setFlag(FLAGS6502 f, bool v)
 {
 	if (v)
@@ -70,6 +71,8 @@ void olc6502::clock()
 
 	cycles--;
 }
+
+// ADDRESSING MODES
 
 uint8_t olc6502::IMP()
 {
@@ -169,4 +172,206 @@ uint8_t olc6502::IND()
 	}
 
 	return 0;
+}
+
+uint8_t olc6502::IZX()
+{
+	uint16_t t = read(pc);
+	pc++;
+
+	uint16_t lo = read((t + (uint16_t)x) & 0x00FF);
+	uint16_t hi = read((t + (uint16_t)x + 1) & 0x00FF);
+
+	addr_abs = (hi << 8) | lo;
+	return 0;
+}
+
+uint8_t olc6502::IZY()
+{
+	uint16_t t = read(pc);
+	pc++;
+
+	uint16_t lo = read(t & 0x00FF);
+	uint16_t hi = read((t + 1) & 0x00FF);
+
+	addr_abs = (hi << 8) | lo;
+	addr_abs += y;
+
+	if ((addr_abs & 0xFF00) != (hi << 8))
+		return 1;
+	else
+		return 0;
+}
+
+uint8_t olc6502::REL()
+{
+	addr_rel = read(pc);
+	pc++;
+	if (addr_rel & 0x80)		// check whether the most significant bit is set to 1 or not
+		addr_rel |= 0xFF00;		// if yes then make all the 1's in the 1st byte
+	return 0;
+}
+
+// INSTRUCTIONS 
+
+uint8_t olc6502::fetch()
+{
+	if (lookup[opcode].addrmode != &olc6502::IMP)
+		fetched = read(addr_abs);
+	return fetched;
+}
+
+uint8_t olc6502::AND()
+{
+	fetch();
+	a = a & fetched;	
+	setFlag(Z, a == 0x00);
+	setFlag(N, a & 0x80);
+	return 1;
+}
+
+uint8_t olc6502::BCS()
+{
+	if (getFlag(C) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BCC()
+{
+	if (getFlag(C) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BEQ()
+{
+	if (getFlag(Z) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BMI()
+{
+	if (getFlag(N) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BNE()
+{
+	if (getFlag(Z) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BPL()
+{
+	if (getFlag(N) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BVC()
+{
+	if (getFlag(V) == 0)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+uint8_t olc6502::BVS()
+{
+	if (getFlag(V) == 1)
+	{
+		cycles++;
+		addr_abs = pc + addr_rel;
+
+		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+			cycles++;
+
+		pc = addr_abs;
+	}
+	return 0;
+}
+
+
+uint8_t olc6502::CLC()
+{
+	setFlag(C, false);
+	return 0;
+}
+
+uint8_t olc6502::CLD()
+{
+	setFlag(D, false);
+	return 0;
+}
+
+
+uint8_t olc6502::ADC()
+{
+	fetch();
+	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)getFlag(C);
+	setFlag(C, temp > 255);
+	setFlag(Z, (temp & 0x00FF) == 0);
+	setFlag(N, temp & 0x80);
+	setFlag(V, (~((uint16_t)a ^ (uint16_t)fetched)) & ((uint16_t)a ^ (uint16_t)temp) & 0x0080);
+	a = temp & 0x00FF;
+	return 1;
 }
