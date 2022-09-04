@@ -370,8 +370,123 @@ uint8_t olc6502::ADC()
 	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)getFlag(C);
 	setFlag(C, temp > 255);
 	setFlag(Z, (temp & 0x00FF) == 0);
-	setFlag(N, temp & 0x80);
+	setFlag(N, temp & 0x0080);
 	setFlag(V, (~((uint16_t)a ^ (uint16_t)fetched)) & ((uint16_t)a ^ (uint16_t)temp) & 0x0080);
 	a = temp & 0x00FF;
 	return 1;
+}
+
+uint8_t olc6502::SBC()
+{
+	fetch();
+
+	uint16_t invValue = (~fetched);
+
+	uint16_t temp = (uint16_t)a + invValue + (uint16_t)getFlag(C);
+	setFlag(C, temp & 0xFF00);
+	setFlag(Z, (temp & 0x00FF) == 0);
+	setFlag(N, temp & 0x0080);
+	setFlag(V, (~((uint16_t)a ^ (uint16_t)fetched)) & ((uint16_t)a ^ (uint16_t)temp) & 0x0080);
+	a = temp & 0x00FF;
+	return 1;
+}
+
+// push on the stack
+uint8_t olc6502::PHA()
+{
+	write(0x0100 + stkp, a);
+	stkp--;
+	return 0;
+}
+
+// pop from the stack
+uint8_t olc6502::PLA()
+{
+	stkp++;
+	a = read(0x0100 + stkp);
+	setFlag(Z, a == 0x00);
+	setFlag(N, a & 0x80);
+	return 0;
+}
+
+void olc6502::reset()
+{
+	a = 0;
+	x = 0;
+	y = 0;
+	stkp = 0xFD;
+	status = 0x00 | U;
+
+	addr_abs = 0xFFFC;
+	uint16_t lo = read(addr_abs);
+	uint16_t hi = read(addr_abs + 1);
+
+	pc = (hi << 8) | lo;
+
+	addr_rel = 0x0000;
+	addr_abs = 0x0000;
+	fetched = 0x00;
+
+	cycles = 8;
+}
+
+void olc6502::irq()
+{
+	if (getFlag(I) == 0)
+	{
+		write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+		stkp--;
+		write(0x0100 + stkp, pc & 0x00FF);
+		stkp--;
+
+		setFlag(B, 0);
+		setFlag(U, 1);
+		setFlag(I, 1);
+		write(0x0100 + stkp, status);
+		stkp--;
+
+		addr_abs = 0xFFFE;
+		uint16_t lo = read(addr_abs);
+		uint16_t hi = read(addr_abs + 1);
+
+		pc = (hi << 8) | lo;
+
+		cycles = 7;
+	}
+}
+
+void olc6502::nmi()
+{
+	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+	stkp--;
+	write(0x0100 + stkp, pc & 0x00FF);
+	stkp--;
+
+	setFlag(B, 0);
+	setFlag(U, 1);
+	setFlag(I, 1);
+	write(0x0100 + stkp, status);
+	stkp--;
+
+	addr_abs = 0xFFFA;
+	uint16_t lo = read(addr_abs);
+	uint16_t hi = read(addr_abs + 1);
+
+	pc = (hi << 8) | lo;
+
+	cycles = 8;
+}
+
+uint8_t olc6502::RTI()
+{
+	stkp++;
+	status = read(0x0100 + stkp);
+	status &= ~B;	// unset the flag B
+	status &= ~U;	// unset the flag U
+
+	stkp++;
+	pc = (uint16_t)read(0x0100 + stkp);
+	stkp++;
+	pc |= ((uint16_t)read(0x0100 + stkp) << 8);
+	return 0;
 }
