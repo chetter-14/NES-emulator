@@ -5,6 +5,7 @@
 olc6502::olc6502()
 {
 	typedef olc6502 t;
+	// we initialize all the instruction objects with the appropriate names, functions and cycles number
 	lookup =
 	{
 		{ "BRK", &t::BRK, &t::IMM, 7 },{ "ORA", &t::ORA, &t::IZX, 6 },{ "???", &t::XXX, &t::IMP, 2 },{ "???", &t::XXX, &t::IMP, 2 },{ "???", &t::XXX, &t::IMP, 2 },{ "ORA", &t::ORA, &t::ZP0, 3 },{ "ASL", &t::ASL, &t::ZP0, 5 },{ "???", &t::XXX, &t::IMP, 5 },{ "PHP", &t::PHP, &t::IMP, 3 },{ "ORA", &t::ORA, &t::IMM, 2 },{ "ASL", &t::ASL, &t::IMP, 2 },{ "???", &t::XXX, &t::IMP, 2 },{ "???", &t::NOP, &t::IMP, 4 },{ "ORA", &t::ORA, &t::ABS, 4 },{ "ASL", &t::ASL, &t::ABS, 6 },{ "???", &t::XXX, &t::IMP, 6 },
@@ -28,18 +29,26 @@ olc6502::olc6502()
 
 olc6502::~olc6502()
 {
+	// it's empty
 }
 
+// BUS
+
+// read from memory via the bus
 uint8_t olc6502::read(uint16_t a)
 {
 	return bus->read(a, false);
 }
 
+// write to memory via the bus
 void olc6502::write(uint16_t a, uint8_t d)
 {
 	bus->write(a, d);
 }
 
+// FLAGS
+
+// whether the specified flag is set or not
 uint8_t olc6502::getFlag(FLAGS6502 f)
 {
 	return (status & f) > 0 ? 1 : 0;
@@ -54,6 +63,9 @@ void olc6502::setFlag(FLAGS6502 f, bool v)
 		status &= ~f;
 }
 
+// EXTERNAL INPUTS
+
+// execute a clock cycle
 void olc6502::clock()
 {
 	if (cycles == 0)
@@ -68,24 +80,104 @@ void olc6502::clock()
 
 		cycles += (additional_cycle1 & additional_cycle2);			// why & operand ? 
 	}
-
 	cycles--;
+}
+
+// resets the cpu: registers, flags, stack pointer, program counter, etc.
+void olc6502::reset()
+{
+	a = 0;
+	x = 0;
+	y = 0;
+	stkp = 0xFD;
+	status = 0x00 | U;
+
+	addr_abs = 0xFFFC;
+	uint16_t lo = read(addr_abs);
+	uint16_t hi = read(addr_abs + 1);
+
+	pc = (hi << 8) | lo;
+
+	addr_rel = 0x0000;
+	addr_abs = 0x0000;
+	fetched = 0x00;
+
+	cycles = 8;
+}
+
+// interrupt request (if 'disable interrupt' flag is set to 0)
+// stops the current execution, saves status and program counter on stack, 
+// jumps to the other location and begins executing those instructions
+void olc6502::irq()
+{
+	if (getFlag(I) == 0)
+	{
+		write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+		stkp--;
+		write(0x0100 + stkp, pc & 0x00FF);
+		stkp--;
+
+		setFlag(B, 0);
+		setFlag(U, 1);
+		setFlag(I, 1);
+		write(0x0100 + stkp, status);
+		stkp--;
+
+		addr_abs = 0xFFFE;
+		uint16_t lo = read(addr_abs);
+		uint16_t hi = read(addr_abs + 1);
+
+		pc = (hi << 8) | lo;
+
+		cycles = 7;
+	}
+}
+
+// non-maskable interrupt
+// this interrupt can not be ignored
+// the logic is the same as with irq()
+void olc6502::nmi()
+{
+	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+	stkp--;
+	write(0x0100 + stkp, pc & 0x00FF);
+	stkp--;
+
+	setFlag(B, 0);
+	setFlag(U, 1);
+	setFlag(I, 1);
+	write(0x0100 + stkp, status);
+	stkp--;
+
+	addr_abs = 0xFFFA;
+	uint16_t lo = read(addr_abs);
+	uint16_t hi = read(addr_abs + 1);
+
+	pc = (hi << 8) | lo;
+
+	cycles = 8;
 }
 
 // ADDRESSING MODES
 
+// implied 
+// the address is implicitly stated in opcode
 uint8_t olc6502::IMP()
 {
 	fetched = a;
 	return 0;
 }
 
+// immediate
+// the second byte of the instruction contains the address
 uint8_t olc6502::IMM()
 {
 	addr_abs = pc++;
 	return 0;
 }
 
+// zero page
+// the second byte is the address on the 0x00__ page
 uint8_t olc6502::ZP0()
 {
 	addr_abs = read(pc);
@@ -94,6 +186,9 @@ uint8_t olc6502::ZP0()
 	return 0;
 }
 
+// indexed zero page (X)
+// the second byte value which is added to the X register value 
+// no carry occurs, the result is 0x00__ address
 uint8_t olc6502::ZPX()
 {
 	addr_abs = (read(pc) + x);
@@ -102,6 +197,8 @@ uint8_t olc6502::ZPX()
 	return 0;
 }
 
+// indexed zero page (Y)
+// the same as ZPX() but with the Y register
 uint8_t olc6502::ZPY()
 {
 	addr_abs = (read(pc) + y);
@@ -407,74 +504,6 @@ uint8_t olc6502::PLA()
 	setFlag(Z, a == 0x00);
 	setFlag(N, a & 0x80);
 	return 0;
-}
-
-void olc6502::reset()
-{
-	a = 0;
-	x = 0;
-	y = 0;
-	stkp = 0xFD;
-	status = 0x00 | U;
-
-	addr_abs = 0xFFFC;
-	uint16_t lo = read(addr_abs);
-	uint16_t hi = read(addr_abs + 1);
-
-	pc = (hi << 8) | lo;
-
-	addr_rel = 0x0000;
-	addr_abs = 0x0000;
-	fetched = 0x00;
-
-	cycles = 8;
-}
-
-void olc6502::irq()
-{
-	if (getFlag(I) == 0)
-	{
-		write(0x0100 + stkp, (pc >> 8) & 0x00FF);
-		stkp--;
-		write(0x0100 + stkp, pc & 0x00FF);
-		stkp--;
-
-		setFlag(B, 0);
-		setFlag(U, 1);
-		setFlag(I, 1);
-		write(0x0100 + stkp, status);
-		stkp--;
-
-		addr_abs = 0xFFFE;
-		uint16_t lo = read(addr_abs);
-		uint16_t hi = read(addr_abs + 1);
-
-		pc = (hi << 8) | lo;
-
-		cycles = 7;
-	}
-}
-
-void olc6502::nmi()
-{
-	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
-	stkp--;
-	write(0x0100 + stkp, pc & 0x00FF);
-	stkp--;
-
-	setFlag(B, 0);
-	setFlag(U, 1);
-	setFlag(I, 1);
-	write(0x0100 + stkp, status);
-	stkp--;
-
-	addr_abs = 0xFFFA;
-	uint16_t lo = read(addr_abs);
-	uint16_t hi = read(addr_abs + 1);
-
-	pc = (hi << 8) | lo;
-
-	cycles = 8;
 }
 
 uint8_t olc6502::RTI()
